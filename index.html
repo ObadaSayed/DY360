@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer 360° View</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+    <style>
+        /* Your existing CSS styles here */
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <header class="header">
+            <h1>Customer 360° View</h1>
+            <div class="search-bar">
+                <input type="text" id="searchInput" placeholder="Email">
+                <button onclick="fetchCustomerData()">Submit</button>
+            </div>
+        </header>
+        <div class="main-content">
+            <div class="left-column">
+                <div class="customer-info">
+                    <div class="status-tags" id="statusTags">
+                        <!-- Status tags will be populated here -->
+                    </div>
+                    <h2 id="customerName">Customer Name</h2>
+                    <img src="https://dubai.peugeot.com/content/dam/peugeot/master/b2c/open/desk/408/408_GT_TRIM_M.png?imwidth=768" alt="Peugeot " class="car-image">
+                </div>
+                <div class="info-box">
+                    <h3>Customer Profile</h3>
+                    <div id="customerProfile">
+                        <!-- Customer profile information will be populated here -->
+                    </div>
+                </div>
+                <div class="info-box">
+                    <h3>Vehicle Information</h3>
+                    <div id="vehicleInfo">
+                        <!-- Vehicle information will be populated here -->
+                    </div>
+                </div>
+                <div class="info-box">
+                    <h3>NPS</h3>
+                    <div id="npsInfo">
+                        <!-- NPS information will be populated here -->
+                    </div>
+                </div>
+            </div>
+            <div class="right-column">
+                <div class="data-section">
+                    <h3>Next Best Offer Recommendations</h3>
+                    <div id="nextBestOffer">
+                        <!-- Next Best Offer information will be populated here -->
+                    </div>
+                </div>
+                <div class="data-section">
+                    <h3>Customer Outbound Communication History</h3>
+                    <table id="communicationHistory">
+                        <!-- Communication history will be populated here -->
+                    </table>
+                </div>
+                <div class="data-section">
+                    <h3>Interaction History</h3>
+                    <table id="interactionHistory">
+                        <!-- Interaction history will be populated here -->
+                    </table>
+                </div>
+                <div class="chart">
+                    <canvas id="interactionChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function fetchCustomerData() {
+            const email = document.getElementById('searchInput').value;
+            const apiUrl = `https://cdp.eu5-prod.gigya.com/api/businessunits/4_Jbn-bNPs040bs3V2VsI-Gw/views/HHF7CxioUMK6h00YIn8DrA/customers?userKey=AKKeVf%2Bd7zCZ&secret=jWVxQD%2BXc6jVsItU1i0JO7HJcwr6%2Fi8N&query=select * from profile where attributes.primaryEmail = '${email}'`;
+
+            try {
+                const response = await fetch(apiUrl);
+                const data = await response.json();
+                if (data.profiles && data.profiles.length > 0) {
+                    updateDashboard(data.profiles[0]);
+                } else {
+                    alert('No customer found with the provided email.');
+                }
+            } catch (error) {
+                console.error('Error fetching customer data:', error);
+                alert('Error fetching customer data. Please try again.');
+            }
+        }
+
+        function updateDashboard(profile) {
+            // Update customer name
+            document.getElementById('customerName').textContent = `${profile.attributes.firstName} ${profile.attributes.lastName}`;
+
+            // Update customer profile
+            const customerProfile = document.getElementById('customerProfile');
+            customerProfile.innerHTML = `
+                <div class="info-item"><span>Name</span><span>${profile.attributes.firstName} ${profile.attributes.lastName}</span></div>
+                <div class="info-item"><span>Mobile</span><span>${profile.attributes.phones[0].number}</span></div>
+                <div class="info-item"><span>Email</span><span>${profile.attributes.primaryEmail}</span></div>
+                <div class="info-item"><span>Customer Since</span><span>${new Date(profile.created).toISOString().split('T')[0]}</span></div>
+                <div class="info-item"><span>Age Group</span><span>${profile.segments.find(s => s.name === "OS: Age Group")?.value || 'N/A'}</span></div>
+                <div class="info-item"><span>Nationality</span><span>${profile.attributes.addresses[0]?.country || 'N/A'}</span></div>
+            `;
+
+            // Update vehicle information
+            const vehicleInfo = document.getElementById('vehicleInfo');
+            vehicleInfo.innerHTML = `
+                <div class="info-item"><span>Vehicles Owned</span><span>${profile.activityIndicators.find(i => i.name === "No. of Owned Vehicles")?.count || 'N/A'}</span></div>
+                <div class="info-item"><span>Make & Model</span><span>Peugeot 408</span></div>
+                <div class="info-item"><span>Last Known Mileage</span><span>${profile.activityIndicators.find(i => i.name === "Current Vehicle Mileage")?.lastNumber || 'N/A'}</span></div>
+                <div class="info-item"><span>EMI</span><span>${profile.activityIndicators.find(i => i.name === "EMI")?.sum || 'N/A'}</span></div>
+            `;
+
+            // Update NPS information
+            const npsInfo = document.getElementById('npsInfo');
+            npsInfo.innerHTML = `
+                <div class="info-item"><span>Overall NPS</span><span>${profile.activityIndicators.find(i => i.name === "Average NPS")?.average || 'N/A'}</span></div>
+            `;
+
+            // Update status tags
+            const statusTags = document.getElementById('statusTags');
+            statusTags.innerHTML = `
+                <span class="tag tag-bronze">${profile.segments.find(s => s.name === "OS: High Value Customer")?.value || 'N/A'}</span>
+                <span class="tag tag-repurchase">${profile.segments.find(s => s.name === "OS: NPS Classification")?.value || 'N/A'}</span>
+            `;
+
+            // Update chart data
+            updateChart(profile);
+        }
+
+        function updateChart(profile) {
+            const ctx = document.getElementById('interactionChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['May', 'June', 'July', 'August', 'September', 'October'],
+                    datasets: [{
+                        label: '# total number of interactions (events)',
+                        data: [2, 32, 15, 79, 3, 1], // You might want to replace this with actual data from the API
+                        backgroundColor: 'rgba(173, 216, 130, 0.2)',
+                        borderColor: 'rgba(173, 216, 130, 1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 5,
+                        pointBackgroundColor: 'rgba(173, 216, 130, 1)',
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                stepSize: 20
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initial load
+        fetchCustomerData();
+    </script>
+</body>
+</html>
